@@ -1,17 +1,17 @@
 import React from "react";
 import { Text, View, StyleSheet, Dimensions, TouchableOpacity, ScrollView } from "react-native";
-import { CategoryProps } from "../../pages/Order";
+import { SelectItemProps } from "../../pages/Order";
 
 interface SelectProps {
-  options: CategoryProps[]
+  options: SelectItemProps[]
   handleClose: () => void
-  onSelect: (item: CategoryProps) => void
+  onSelect: (item: SelectItemProps) => void
 }
 
 const { width: WIDTH, height: HEIGHT } = Dimensions.get('window')
 
 export function Select({ options, handleClose, onSelect }: SelectProps) {
-  function handleOnSelect(item: CategoryProps) {
+  function handleOnSelect(item: SelectItemProps) {
     onSelect(item)
     handleClose()
   }

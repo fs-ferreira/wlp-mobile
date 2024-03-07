@@ -1,10 +1,13 @@
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, FlatList } from 'react-native'
 import Feather from '@expo/vector-icons/Feather';
 import { api } from "../../services/api";
 import Toast from "react-native-toast-message";
 import { Select } from "../../components/Select";
+import ItemList from "../../components/ItemList";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { StackParamsList } from "../../routes/app.routes";
 
 type RouteDetailParams = {
   Order: {
@@ -13,22 +16,35 @@ type RouteDetailParams = {
   }
 }
 
-export type CategoryProps = {
+export type SelectItemProps = {
   id: string,
   name: string
 }
+
+export type ItemProps = {
+  id: string,
+  product_id: string
+  name: string
+  amount: string | number
+}
+
 
 type OrderRouteProps = RouteProp<RouteDetailParams, 'Order'>
 
 export default function Order() {
   const route = useRoute<OrderRouteProps>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<StackParamsList>>();
 
-  const [categories, setCategories] = useState<CategoryProps[]>([])
-  const [selectedCategory, setSelectedCategory] = useState<CategoryProps | null>()
+  const [categories, setCategories] = useState<SelectItemProps[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<SelectItemProps | null>()
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false)
 
+  const [products, setProducts] = useState<SelectItemProps[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<SelectItemProps | null>()
+  const [isProductsOpen, setIsProductsOpen] = useState(false)
+
   const [amount, setAmount] = useState('')
+  const [items, setItems] = useState<ItemProps[]>([])
 
   useEffect(() => {
     async function loadCategories() {
@@ -38,6 +54,20 @@ export default function Order() {
 
     loadCategories()
   }, [])
+
+  useEffect(() => {
+    async function loadCategories() {
+      if (selectedCategory) {
+        const response = await api.get('/product', {
+          params: {
+            category_id: selectedCategory?.id
+          }
+        })
+        setProducts(response.data)
+      }
+    }
+    loadCategories()
+  }, [selectedCategory])
 
   async function handleCloseOrder() {
     try {
@@ -59,8 +89,61 @@ export default function Order() {
     }
   }
 
-  function handleSelectCategory(item: CategoryProps) {
+  function handleSelectCategory(item?: SelectItemProps) {
+    setSelectedProduct(null)
     setSelectedCategory(item)
+  }
+
+  function handleSelectProduct(item?: SelectItemProps) {
+    setSelectedProduct(item)
+  }
+
+  async function handleAddItem() {
+    if (!selectedCategory || !selectedProduct || !Number(amount)) {
+      return
+    }
+
+    const response = await api.post('order/item', {
+      order_id: route.params.order_id,
+      product_id: selectedProduct.id,
+      amount: Number(amount)
+    })
+
+    const data: ItemProps = {
+      id: response.data.id,
+      product_id: selectedProduct.id,
+      name: selectedProduct.name,
+      amount
+    }
+
+    setItems([...items, data])
+  }
+
+  async function handleDeleteItem(id: string) {
+    try {
+      await api.delete(`order/item/${id}`)
+      setItems(items.filter(item => item.id !== id))
+      Toast.show({
+        type: 'success',
+        text1: 'Success!',
+        text2: 'Item removed from list',
+        text2Style: { fontSize: 13 }
+      });
+    } catch (err) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error!',
+        text2: 'Error on delete item',
+        text2Style: { fontSize: 13 }
+      });
+    }
+  }
+
+  function handleFinishOrder() {
+    navigation.navigate('FinishOrder', {
+      table: route.params.table,
+      order_id: route.params.order_id
+    })
   }
 
   return (
@@ -71,22 +154,40 @@ export default function Order() {
           <Feather name="trash-2" size={28} color="#7f1d1d" onPress={handleCloseOrder} />
         </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.select} onPress={() => setIsCategoriesOpen(true)}>
+      <TouchableOpacity
+        style={styles.select}
+        onPress={() => setIsCategoriesOpen(true)}
+      >
         <Text style={{ color: selectedCategory ? '#fafafa' : '#a3a3a3' }}>
           {selectedCategory
             ? selectedCategory?.name
             : 'Select a category'
           }
         </Text>
-        <Feather 
-        style={{display: selectedCategory?.name ? 'flex': 'none'}}
-        name="x" 
-        size={24} 
-        color="#7f1d1d" 
-        onPress={() => setSelectedCategory(null)} />
+        <Feather
+          style={{ display: selectedCategory?.name ? 'flex' : 'none' }}
+          name="x"
+          size={24}
+          color="#7f1d1d"
+          onPress={() => handleSelectCategory()} />
       </TouchableOpacity>
-      <TouchableOpacity style={styles.select}>
-        <Text style={{ color: '#a3a3a3' }}>Pizzas</Text>
+      <TouchableOpacity
+        style={[styles.select, { opacity: !selectedCategory ? 0.4 : 1 }]}
+        disabled={!selectedCategory}
+        onPress={() => setIsProductsOpen(true)}
+      >
+        <Text style={{ color: selectedProduct ? '#fafafa' : '#a3a3a3' }}>
+          {selectedProduct
+            ? selectedProduct?.name
+            : 'Select a prodcut'
+          }
+        </Text>
+        <Feather
+          style={{ display: selectedProduct?.name ? 'flex' : 'none' }}
+          name="x"
+          size={24}
+          color="#7f1d1d"
+          onPress={() => handleSelectProduct()} />
       </TouchableOpacity>
       <View style={styles.amountContainer}>
         <Text style={styles.amountText}>Amount</Text>
@@ -100,13 +201,25 @@ export default function Order() {
         />
       </View>
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.addButton}>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddItem}>
           <Text style={styles.buttonText}>+</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.nextButton}>
+        <TouchableOpacity
+          disabled={!items.length}
+          style={[styles.nextButton, { opacity: !items.length ? 0.3 : 1 }]}
+          onPress={handleFinishOrder}
+        >
           <Text style={styles.buttonText}>Next</Text>
         </TouchableOpacity>
       </View>
+
+      <FlatList
+        keyExtractor={(item) => item.id}
+        data={items}
+        showsVerticalScrollIndicator={false}
+        style={styles.items}
+        renderItem={({ item }) => (<ItemList data={item} deleteItemFn={handleDeleteItem} />)}
+      />
 
       <Modal
         transparent
@@ -117,6 +230,18 @@ export default function Order() {
           handleClose={() => setIsCategoriesOpen(false)}
           options={categories}
           onSelect={handleSelectCategory}
+        />
+      </Modal>
+
+      <Modal
+        transparent
+        visible={isProductsOpen}
+        animationType="slide"
+      >
+        <Select
+          handleClose={() => setIsProductsOpen(false)}
+          options={products}
+          onSelect={handleSelectProduct}
         />
       </Modal>
     </View>
@@ -157,7 +282,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     alignItems: "center",
     justifyContent: "space-between",
-    flexDirection:"row"
+    flexDirection: "row"
   },
   amountContainer: {
     width: '90%',
@@ -194,5 +319,12 @@ const styles = StyleSheet.create({
     color: '#fafafa',
     fontSize: 24,
     fontWeight: "bold"
+  },
+  items: {
+    flex: 1,
+    flexDirection: "column",
+    marginTop: 20,
+    marginRight: 'auto',
+    paddingLeft: 20,
   }
 })
